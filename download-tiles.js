@@ -26,21 +26,32 @@ const path = require("path");
 const TileProgressDB = require('./db-helper');
 
 // ===================== 配置 =====================
+
+/**
+ * 目录配置:
+ * 方式1：反斜杠全部转义
+const OUTPUT_DIR = "D:\\map\\world";
+方式2：用正斜杠（Node.js 在 Windows 下同样支持）
+const OUTPUT_DIR = "D:/map/world";
+方式3：用 path.join 拼接，避免手写分隔符
+const OUTPUT_DIR = path.join("D:\\", "map", "world");
+ */
+
 const CONFIGS_DIR = path.resolve(__dirname, "./configs");
-const OUTPUT_DIR  = path.resolve(__dirname, "./tiles");
-const DB_DIR      = path.resolve(__dirname, "./db");
-const MAX_ZOOM_CAP       = 18;
-const CONCURRENCY        = 50;
-const RETRY_LIMIT        = 3;
-const RETRY_DELAY_MS     = 1500;
+const OUTPUT_DIR = path.resolve(__dirname, "./tiles");
+const DB_DIR = path.resolve(__dirname, "./db");
+const MAX_ZOOM_CAP = 18;
+const CONCURRENCY = 50;
+const RETRY_LIMIT = 3;
+const RETRY_DELAY_MS = 1500;
 const REQUEST_TIMEOUT_MS = 30000;
-const PROGRESS_EVERY_MS  = 300;
+const PROGRESS_EVERY_MS = 300;
 // ================================================
 
 // -------- 全局退出控制 --------
 
 let shuttingDown = false;
-let sigintCount  = 0;
+let sigintCount = 0;
 
 process.on('SIGINT', () => {
   sigintCount++;
@@ -52,7 +63,7 @@ process.on('SIGINT', () => {
   shuttingDown = true;
 });
 process.on('SIGTERM', () => { console.log('\n收到 SIGTERM，正在退出...'); shuttingDown = true; });
-process.on('SIGHUP',  () => { console.log('\n收到 SIGHUP，正在退出...');  shuttingDown = true; });
+process.on('SIGHUP', () => { console.log('\n收到 SIGHUP，正在退出...'); shuttingDown = true; });
 
 // -------- 坐标转换 --------
 
@@ -92,10 +103,10 @@ function loadConfigs(filterPrefixes) {
       return filterPrefixes.some((p) => uid.startsWith(p));
     })
     .map((d) => ({
-      uid:     d.uid || path.basename(d._file, ".json"),
-      name:    d.name || d.uid,
-      tiles:   d.tiles,
-      bounds:  d.bounds,
+      uid: d.uid || path.basename(d._file, ".json"),
+      name: d.name || d.uid,
+      tiles: d.tiles,
+      bounds: d.bounds,
       minzoom: d.minzoom,
       maxzoom: Math.min(d.maxzoom, MAX_ZOOM_CAP),
     }));
@@ -144,7 +155,7 @@ function downloadTile(url, destPath, retriesLeft) {
           })
         );
         file.on("error", (e) => {
-          try { fs.unlinkSync(tmp); } catch (_) {}
+          try { fs.unlinkSync(tmp); } catch (_) { }
           reject(e);
         });
         return;
@@ -215,7 +226,7 @@ async function downloadDataset(config) {
   const { uid, name, tiles, minzoom, maxzoom, bounds } = config;
   const [west, south, east, north] = bounds;
   const tileUrlTemplate = tiles[0];
-  const outDir    = path.join(OUTPUT_DIR, uid);
+  const outDir = path.join(OUTPUT_DIR, uid);
   const totalBbox = countTiles(config);
 
   console.log(`\n▶  ${name}`);
@@ -302,7 +313,7 @@ async function downloadDataset(config) {
 
       // 已完成的列批次直接跳过
       if (db.isBatchDone(z, x)) {
-        stats.skip     += colHeight;
+        stats.skip += colHeight;
         stats.processed += colHeight;
         printProgress();
         continue;
@@ -329,7 +340,7 @@ async function downloadDataset(config) {
             printProgress();
             return;
           }
-        } catch (_) {}
+        } catch (_) { }
 
         const url = tileUrlTemplate.replace("{z}", z).replace("{x}", x).replace("{y}", y);
         try {
@@ -367,8 +378,8 @@ async function downloadDataset(config) {
   db.close();
 
   return {
-    ok:    stats.ok    + retryOk,
-    skip:  stats.skip  + retrySkip,
+    ok: stats.ok + retryOk,
+    skip: stats.skip + retrySkip,
     error: stats.error + retryFail,
   };
 }
@@ -421,7 +432,7 @@ async function main() {
       `  ${uid.substring(0, 8)}  ${cfg ? cfg.name : ""}` +
       `  下载:${fmtNum(s.ok)} 跳过:${fmtNum(s.skip)} 错误:${s.error}`
     );
-    totalOk   += s.ok;
+    totalOk += s.ok;
     totalSkip += s.skip;
     totalError += s.error;
   }
