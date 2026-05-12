@@ -30,7 +30,7 @@ const TileProgressDB = require('./db-helper');
 /**
  * 目录配置:
  * 方式1：反斜杠全部转义
-const OUTPUT_DIR = "D:\\map\\world";
+const OUTPUT_DIR = "Y:\\world\\haitu";
 方式2：用正斜杠（Node.js 在 Windows 下同样支持）
 const OUTPUT_DIR = "D:/map/world";
 方式3：用 path.join 拼接，避免手写分隔符
@@ -40,12 +40,12 @@ const OUTPUT_DIR = path.join("D:\\", "map", "world");
 const CONFIGS_DIR = path.resolve(__dirname, "./configs");
 const OUTPUT_DIR = path.resolve(__dirname, "./tiles");
 const DB_DIR = path.resolve(__dirname, "./db");
-const MAX_ZOOM_CAP = 18;
-const CONCURRENCY = 50;
-const RETRY_LIMIT = 3;
-const RETRY_DELAY_MS = 1500;
-const REQUEST_TIMEOUT_MS = 30000;
-const PROGRESS_EVERY_MS = 300;
+const MAX_ZOOM_CAP = 18;        // 最大层级，超出此值的 maxzoom 会被截断
+const CONCURRENCY = 10;         // 并发请求数
+const RETRY_LIMIT = 3;          // 单瓦片最大重试次数
+const RETRY_DELAY_MS = 1500;    // 重试间隔（毫秒）
+const REQUEST_TIMEOUT_MS = 30000; // 单次请求超时（毫秒）
+const PROGRESS_EVERY_MS = 300;  // 进度行刷新间隔（毫秒），避免频繁 I/O
 // ================================================
 
 // -------- 全局退出控制 --------
@@ -67,10 +67,12 @@ process.on('SIGHUP', () => { console.log('\n收到 SIGHUP，正在退出...'); s
 
 // -------- 坐标转换 --------
 
+// Web Mercator 标准公式：经度 → 瓦片列号
 function lngToTileX(lng, z) {
   return Math.floor(((lng + 180) / 360) * Math.pow(2, z));
 }
 
+// Web Mercator 标准公式：纬度 → 瓦片行号；截断到 ±85.051129° 以避免投影溢出
 function latToTileY(lat, z) {
   lat = Math.max(-85.051129, Math.min(85.051129, lat));
   const rad = (lat * Math.PI) / 180;
@@ -82,6 +84,7 @@ function latToTileY(lat, z) {
 
 // -------- 配置加载 --------
 
+// 读取 configs/ 下所有 UUID.json，按命令行前缀过滤后返回标准化配置数组
 function loadConfigs(filterPrefixes) {
   const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/i;
@@ -114,6 +117,7 @@ function loadConfigs(filterPrefixes) {
 
 // -------- 瓦片计数 --------
 
+// 按 bbox 和 zoom 范围估算瓦片总数，用于进度百分比和 ETA
 function countTiles(config) {
   const [west, south, east, north] = config.bounds;
   let total = 0;
@@ -127,11 +131,13 @@ function countTiles(config) {
 
 // -------- HTTP 下载 --------
 
+// 下载单个瓦片到 destPath，204/404 返回 skip，其他错误按 retriesLeft 重试
 function downloadTile(url, destPath, retriesLeft) {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
 
     const client = url.startsWith("https") ? https : http;
+    // rejectUnauthorized: false 跳过自签名证书校验，海图服务器常见
     const req = client.get(url, { rejectUnauthorized: false }, (res) => {
       const { statusCode } = res;
 
@@ -141,6 +147,7 @@ function downloadTile(url, destPath, retriesLeft) {
       }
 
       if (statusCode === 200) {
+        // 先写 .tmp 临时文件，完成后原子重命名，防止中断产生残缺文件
         const tmp = destPath + ".tmp";
         const file = fs.createWriteStream(tmp);
         res.pipe(file);
@@ -189,6 +196,7 @@ function downloadTile(url, destPath, retriesLeft) {
 
 // -------- 并发池 --------
 
+// 以固定并发数消费迭代器，shouldStop() 返回 true 时提前终止所有 worker
 async function runWithConcurrency(iter, concurrency, workerFn, shouldStop = null) {
   async function runOne() {
     while (true) {
@@ -203,6 +211,7 @@ async function runWithConcurrency(iter, concurrency, workerFn, shouldStop = null
 
 // -------- 进度格式化 --------
 
+// 将剩余秒数格式化为人类可读的 ETA 字符串
 function fmtEta(sec) {
   if (sec <= 0 || !isFinite(sec)) return "--";
   if (sec < 60) return `${sec}s`;
@@ -210,18 +219,21 @@ function fmtEta(sec) {
   return `${Math.floor(sec / 3600)}h${Math.floor((sec % 3600) / 60)}m`;
 }
 
+// 数字加千分位分隔符，便于阅读大数
 function fmtNum(n) {
   return n.toLocaleString("en-US");
 }
 
 // -------- y 列生成器 --------
 
+// 生成 [yMin, yMax] 闭区间整数序列，供并发池消费
 function* yRange(yMin, yMax) {
   for (let y = yMin; y <= yMax; y++) yield y;
 }
 
 // -------- 单数据集下载 --------
 
+// Phase 1 重试历史错误瓦片，Phase 2 按 (z,x) 列批次正常下载，支持断点续传和中断安全
 async function downloadDataset(config) {
   const { uid, name, tiles, minzoom, maxzoom, bounds } = config;
   const [west, south, east, north] = bounds;
@@ -386,6 +398,7 @@ async function downloadDataset(config) {
 
 // -------- 主入口 --------
 
+// 解析命令行前缀参数，加载匹配配置，依次下载各数据集并打印汇总
 async function main() {
   const filterPrefixes = process.argv.slice(2);
   const configs = loadConfigs(filterPrefixes.length > 0 ? filterPrefixes : null);
