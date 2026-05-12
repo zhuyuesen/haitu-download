@@ -1,0 +1,14 @@
+{
+  "name": "nautical-tile-downloader",
+  "version": "1.0.0",
+  "description": "批量下载海图 PBF 矢量瓦片，支持断点续传、并发控制、204/404 自动跳过",
+  "main": "download-tiles.js",
+  "scripts": {
+    "start": "node download-tiles.js",
+    "download": "node download-tiles.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "license": "ISC"
+}

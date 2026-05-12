@@ -1,0 +1,163 @@
+{
+  "center": [
+    132.890625,
+    33.722348,
+    8
+  ],
+  "bounds": [
+    104.984401,
+    2.592822,
+    133.078723,
+    41.347437
+  ],
+  "vector_layers": [
+    {
+      "id": "BUAARE_polygon_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_area": "Number",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "Polygon"
+    },
+    {
+      "id": "LNDARE_polygon_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_area": "Number",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "Polygon"
+    },
+    {
+      "id": "LNDRGN_polygon_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_area": "Number",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "Polygon"
+    },
+    {
+      "id": "RAILWY_line_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "LineString"
+    },
+    {
+      "id": "RIVERS_line_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "LineString"
+    },
+    {
+      "id": "RIVERS_polygon_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_area": "Number",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "Polygon"
+    },
+    {
+      "id": "ROADWY_line_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 18,
+      "fields": {
+        "agen": "Number",
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "LineString"
+    }
+  ],
+  "tiles": [
+    "https://www.onechart.cn:11010/api/v2/tiles/utsgpsuiqm/{z}/{x}/{y}.pbf?htkey=b0e3be2d-29f2-406a-9736-43ed7fe0b57a"
+  ],
+  "_id": "697ac9ff254ffb67d401036b",
+  "uid": "3d5b1fda-ce60-4f50-b8ff-517ee22c8ca3",
+  "__v": 0,
+  "epsg": 3857,
+  "maxzoom": 18,
+  "minzoom": 6,
+  "name": "20260129全国海图7-18级别接边",
+  "tiles_id": "utsgpsuiqm",
+  "format": "pbf",
+  "scheme": "zxy",
+  "version": "1.0.0",
+  "tilejson": "2.1.0",
+  "data": [],
+  "grids": [],
+  "tags": []
+}

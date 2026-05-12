@@ -1,0 +1,67 @@
+{
+  "center": [
+    119.707031,
+    26.588419,
+    10
+  ],
+  "bounds": [
+    105.671781,
+    3.050037,
+    132.830721,
+    40.945011
+  ],
+  "vector_layers": [
+    {
+      "id": "RAILWY_line_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 10,
+      "fields": {
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "LineString"
+    },
+    {
+      "id": "ROADWY_line_JB",
+      "description": "",
+      "minzoom": 6,
+      "maxzoom": 10,
+      "fields": {
+        "class": "String",
+        "datupd": "String",
+        "editor": "String",
+        "f_uid": "String",
+        "prim": "Number",
+        "region": "String",
+        "shape_length": "Number",
+        "zoom": "String"
+      },
+      "geometry": "LineString"
+    }
+  ],
+  "tiles": [
+    "https://www.onechart.cn:11010/api/v2/tiles/n8d7ltjp97/{z}/{x}/{y}.pbf?htkey=b0e3be2d-29f2-406a-9736-43ed7fe0b57a"
+  ],
+  "_id": "68425ffecac240c58735c404",
+  "uid": "521839b4-2ab5-4205-96f4-3a877d740dc0",
+  "__v": 0,
+  "epsg": 3857,
+  "maxzoom": 10,
+  "minzoom": 6,
+  "name": "20250605全球globle7-10级接边桥梁",
+  "tiles_id": "n8d7ltjp97",
+  "format": "pbf",
+  "scheme": "zxy",
+  "version": "1.0.0",
+  "tilejson": "2.1.0",
+  "data": [],
+  "grids": [],
+  "tags": []
+}

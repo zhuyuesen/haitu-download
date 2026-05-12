@@ -1,0 +1,63 @@
+{
+  "center": [
+    114.433594,
+    9.968805,
+    10
+  ],
+  "bounds": [
+    108.202721,
+    3.408477,
+    124.561454,
+    25.929122
+  ],
+  "vector_layers": [
+    {
+      "id": "九段界",
+      "description": "",
+      "minzoom": 0,
+      "maxzoom": 10,
+      "fields": {
+        "acc": "Number",
+        "bst": "Number",
+        "clasid": "String",
+        "clasid92": "String",
+        "elemid": "String",
+        "f_code": "String",
+        "f_uid": "String",
+        "id": "Number",
+        "use": "Number"
+      },
+      "geometry": "LineString"
+    },
+    {
+      "id": "岛屿",
+      "description": "",
+      "minzoom": 0,
+      "maxzoom": 10,
+      "fields": {
+        "f_uid": "String",
+        "name": "String",
+        "type": "String"
+      },
+      "geometry": "LineString"
+    }
+  ],
+  "tiles": [
+    "https://www.onechart.cn:11010/api/v2/tiles/hj9wsmxhr1/{z}/{x}/{y}.pbf?htkey=b0e3be2d-29f2-406a-9736-43ed7fe0b57a"
+  ],
+  "_id": "6825975d8ad868760bb77310",
+  "uid": "4a774395-021b-43d2-84d3-73d8ec469db1",
+  "__v": 0,
+  "epsg": 3857,
+  "maxzoom": 10,
+  "minzoom": 0,
+  "name": "界线岛屿",
+  "tiles_id": "hj9wsmxhr1",
+  "format": "pbf",
+  "scheme": "zxy",
+  "version": "1.0.0",
+  "tilejson": "2.1.0",
+  "data": [],
+  "grids": [],
+  "tags": []
+}

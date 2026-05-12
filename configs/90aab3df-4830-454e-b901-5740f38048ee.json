@@ -1,0 +1,80 @@
+{
+  "center": [
+    42.1875,
+    13.907297,
+    6
+  ],
+  "bounds": [
+    -180,
+    -78.443804,
+    180,
+    85.051129
+  ],
+  "vector_layers": [
+    {
+      "id": "DEPARE_polygon",
+      "description": "",
+      "minzoom": 1,
+      "maxzoom": 10,
+      "fields": {
+        "AGEN": "Number",
+        "BGLX": "String",
+        "DRVAL1": "String",
+        "DRVAL11": "String",
+        "DRVAL2": "String",
+        "DTSCAL": "String",
+        "FFPT_RIND": "Number",
+        "FIDN": "Number",
+        "FIDS": "Number",
+        "GRUP": "Number",
+        "INFORM": "String",
+        "LNAM": "String",
+        "LNAM_REFS": "String",
+        "NINFOM": "String",
+        "NTXTDS": "String",
+        "OBJECTID": "Number",
+        "OBJL": "Number",
+        "PRIM": "Number",
+        "QSXSJB": "String",
+        "QUASOU": "String",
+        "RCID": "Number",
+        "RECDAT": "String",
+        "RECIND": "String",
+        "RVER": "Number",
+        "SCAMAX": "Number",
+        "SCAMIN": "Number",
+        "SJLY": "String",
+        "SORDAT": "String",
+        "SORIND": "String",
+        "SOUACC": "String",
+        "Shape_Area": "Number",
+        "Shape_Leng": "Number",
+        "Shape_Length": "Number",
+        "TXTDSC": "String",
+        "VERDAT": "String",
+        "ZZXSJB": "String",
+        "f_uid": "String",
+        "xsjb": "String"
+      },
+      "geometry": "Polygon"
+    }
+  ],
+  "tiles": [
+    "https://www.onechart.cn:11010/api/v2/tiles/eyp33wkd7v/{z}/{x}/{y}.pbf?htkey=b0e3be2d-29f2-406a-9736-43ed7fe0b57a"
+  ],
+  "_id": "68425ffdcac240c58735c3a1",
+  "uid": "90aab3df-4830-454e-b901-5740f38048ee",
+  "__v": 0,
+  "epsg": 3857,
+  "maxzoom": 10,
+  "minzoom": 1,
+  "name": "1_10级globe20250605_DEPARE",
+  "tiles_id": "eyp33wkd7v",
+  "format": "pbf",
+  "scheme": "zxy",
+  "version": "1.0.0",
+  "tilejson": "2.1.0",
+  "data": [],
+  "grids": [],
+  "tags": []
+}
