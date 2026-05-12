@@ -4,10 +4,10 @@
  *
  * 特性：
  *   - 自动读取 ./configs 下所有 UUID 命名的 JSON 配置
- *   - 断点续传：已存在文件自动跳过
- *   - 204 / 404 → 跳过（不保存），不计为错误
- *   - 网络错误自动重试
- *   - maxzoom 超过 18 时统一截断到 18
+ *   - 断点续传：已完成的 (z,x) 列批次记录到 SQLite，下次直接跳过
+ *   - 204 / 404 → 跳过（不保存），整列完成后记录，下次不再重复请求
+ *   - 网络错误记录到 DB，下次运行优先重试，再继续正常下载
+ *   - 中断安全：SIGINT / SIGTERM / SIGHUP 均可优雅退出并保存进度
  *   - 并发下载，实时进度显示
  *
  * 用法：
@@ -17,21 +17,42 @@
  * 推荐单个下载, 全部id为: 3d5b1fda 4a774395 4cf48c67-c38f 90aab3df 345f6de2 521839b4
  */
 
+'use strict';
+
 const https = require("https");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const TileProgressDB = require('./db-helper');
 
 // ===================== 配置 =====================
 const CONFIGS_DIR = path.resolve(__dirname, "./configs");
-const OUTPUT_DIR = path.resolve(__dirname, "./tiles");
-const MAX_ZOOM_CAP = 18;    // zoom 上限，超出截断
-const CONCURRENCY = 8;     // 并发请求数（可调高，多数是快速 204）
-const RETRY_LIMIT = 3;     // 网络错误重试次数
-const RETRY_DELAY_MS = 1500;  // 重试间隔（毫秒）
-const REQUEST_TIMEOUT_MS = 30000; // 单个请求超时（毫秒）
-const PROGRESS_EVERY_MS = 300;   // 进度刷新间隔
+const OUTPUT_DIR  = path.resolve(__dirname, "./tiles");
+const DB_DIR      = path.resolve(__dirname, "./db");
+const MAX_ZOOM_CAP       = 18;
+const CONCURRENCY        = 50;
+const RETRY_LIMIT        = 3;
+const RETRY_DELAY_MS     = 1500;
+const REQUEST_TIMEOUT_MS = 30000;
+const PROGRESS_EVERY_MS  = 300;
 // ================================================
+
+// -------- 全局退出控制 --------
+
+let shuttingDown = false;
+let sigintCount  = 0;
+
+process.on('SIGINT', () => {
+  sigintCount++;
+  if (sigintCount >= 2) {
+    console.log('\n强制退出');
+    process.exit(1);
+  }
+  console.log('\n收到 Ctrl+C，完成当前列批次后退出（再按一次强制退出）');
+  shuttingDown = true;
+});
+process.on('SIGTERM', () => { console.log('\n收到 SIGTERM，正在退出...'); shuttingDown = true; });
+process.on('SIGHUP',  () => { console.log('\n收到 SIGHUP，正在退出...');  shuttingDown = true; });
 
 // -------- 坐标转换 --------
 
@@ -61,9 +82,7 @@ function loadConfigs(filterPrefixes) {
 
   return files
     .map((f) => {
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(CONFIGS_DIR, f), "utf-8")
-      );
+      const raw = JSON.parse(fs.readFileSync(path.join(CONFIGS_DIR, f), "utf-8"));
       return { _file: f, ...raw };
     })
     .filter((d) => Array.isArray(d.tiles) && d.tiles.length > 0)
@@ -73,31 +92,16 @@ function loadConfigs(filterPrefixes) {
       return filterPrefixes.some((p) => uid.startsWith(p));
     })
     .map((d) => ({
-      uid: d.uid || path.basename(d._file, ".json"),
-      name: d.name || d.uid,
-      tiles: d.tiles,
-      bounds: d.bounds,
+      uid:     d.uid || path.basename(d._file, ".json"),
+      name:    d.name || d.uid,
+      tiles:   d.tiles,
+      bounds:  d.bounds,
       minzoom: d.minzoom,
       maxzoom: Math.min(d.maxzoom, MAX_ZOOM_CAP),
     }));
 }
 
-// -------- 瓦片枚举（惰性生成器，不占内存） --------
-
-function* enumerateTiles(config) {
-  const [west, south, east, north] = config.bounds;
-  for (let z = config.minzoom; z <= config.maxzoom; z++) {
-    const xMin = lngToTileX(west, z);
-    const xMax = lngToTileX(east, z);
-    const yMin = latToTileY(north, z); // 纬度大 → y 小
-    const yMax = latToTileY(south, z);
-    for (let x = xMin; x <= xMax; x++) {
-      for (let y = yMin; y <= yMax; y++) {
-        yield { z, x, y };
-      }
-    }
-  }
-}
+// -------- 瓦片计数 --------
 
 function countTiles(config) {
   const [west, south, east, north] = config.bounds;
@@ -120,7 +124,6 @@ function downloadTile(url, destPath, retriesLeft) {
     const req = client.get(url, { rejectUnauthorized: false }, (res) => {
       const { statusCode } = res;
 
-      // 204 No Content 或 404：该坐标无瓦片，跳过
       if (statusCode === 204 || statusCode === 404) {
         res.resume();
         return resolve({ status: "skip", code: statusCode });
@@ -141,13 +144,12 @@ function downloadTile(url, destPath, retriesLeft) {
           })
         );
         file.on("error", (e) => {
-          try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ }
+          try { fs.unlinkSync(tmp); } catch (_) {}
           reject(e);
         });
         return;
       }
 
-      // 其他状态码视为可重试错误
       res.resume();
       const err = new Error(`HTTP ${statusCode}`);
       if (retriesLeft > 0) {
@@ -161,7 +163,6 @@ function downloadTile(url, destPath, retriesLeft) {
     });
 
     req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("timeout")));
-
     req.on("error", (err) => {
       if (retriesLeft > 0) {
         setTimeout(
@@ -175,13 +176,13 @@ function downloadTile(url, destPath, retriesLeft) {
   });
 }
 
-// -------- 并发池（基于生成器，O(1) 内存） --------
+// -------- 并发池 --------
 
-async function runWithConcurrency(gen, concurrency, workerFn) {
-  // JS 单线程，gen.next() 调用之间不会有竞态
+async function runWithConcurrency(iter, concurrency, workerFn, shouldStop = null) {
   async function runOne() {
     while (true) {
-      const { value, done } = gen.next();
+      if (shouldStop?.()) return;
+      const { value, done } = iter.next();
       if (done) return;
       await workerFn(value);
     }
@@ -202,12 +203,19 @@ function fmtNum(n) {
   return n.toLocaleString("en-US");
 }
 
+// -------- y 列生成器 --------
+
+function* yRange(yMin, yMax) {
+  for (let y = yMin; y <= yMax; y++) yield y;
+}
+
 // -------- 单数据集下载 --------
 
 async function downloadDataset(config) {
-  const { uid, name, tiles, minzoom, maxzoom } = config;
+  const { uid, name, tiles, minzoom, maxzoom, bounds } = config;
+  const [west, south, east, north] = bounds;
   const tileUrlTemplate = tiles[0];
-  const outDir = path.join(OUTPUT_DIR, uid);
+  const outDir    = path.join(OUTPUT_DIR, uid);
   const totalBbox = countTiles(config);
 
   console.log(`\n▶  ${name}`);
@@ -215,10 +223,53 @@ async function downloadDataset(config) {
   console.log(`   zoom ${minzoom}–${maxzoom}  包围框瓦片坐标数: ${fmtNum(totalBbox)}`);
   console.log(`   输出: ${outDir}`);
 
+  const db = new TileProgressDB(DB_DIR, uid);
+  console.log(`   进度DB: ${path.join(DB_DIR, uid + '.db')}  已完成批次: ${fmtNum(db.completedBatchCount())}  历史错误: ${db.errorCount()}`);
+
+  // ---- Phase 1：重试历史错误 tile ----
+
+  const errorTiles = db.getErrorTiles();
+  let retryOk = 0, retrySkip = 0, retryFail = 0;
+
+  if (errorTiles.length > 0 && !shuttingDown) {
+    console.log(`\n   [Phase 1] 重试 ${errorTiles.length} 个历史错误瓦片...`);
+    let retried = 0;
+    const retryIter = errorTiles[Symbol.iterator]();
+
+    await runWithConcurrency(retryIter, CONCURRENCY, async ({ z, x, y }) => {
+      if (shuttingDown) return;
+      const destPath = path.join(outDir, String(z), String(x), `${y}.pbf`);
+      const url = tileUrlTemplate.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+      try {
+        const result = await downloadTile(url, destPath, RETRY_LIMIT);
+        db.removeError(z, x, y);
+        result.status === "ok" ? retryOk++ : retrySkip++;
+      } catch (_) {
+        retryFail++;
+      }
+      retried++;
+      process.stdout.write(
+        `\r   重试: ${retried}/${errorTiles.length}  成功:${retryOk}  空瓦片:${retrySkip}  仍失败:${retryFail}   `
+      );
+    }, () => shuttingDown);
+
+    console.log(`\n   Phase 1 完成：解决 ${retryOk + retrySkip} 个，仍失败 ${db.errorCount()} 个`);
+  }
+
+  // 将本次重试后仍失败的 tile 放入 Set，Phase 2 中跳过（本次不再重复尝试）
+  const stillErrorSet = new Set(
+    db.getErrorTiles().map(({ z, x, y }) => `${z}:${x}:${y}`)
+  );
+
+  // ---- Phase 2：按 (z, x) 列批次正常下载 ----
+
+  if (errorTiles.length > 0 && !shuttingDown) {
+    console.log('   [Phase 2] 继续正常下载...');
+  }
+
   const stats = { ok: 0, skip: 0, error: 0, processed: 0 };
   const startTime = Date.now();
   let lastPrint = 0;
-  let shuttingDown = false;
 
   const printProgress = (force = false) => {
     const now = Date.now();
@@ -240,66 +291,92 @@ async function downloadDataset(config) {
     );
   };
 
-  // SIGINT：本次数据集停止，下次从断点继续
-  const onSigint = () => { shuttingDown = true; };
-  process.on("SIGINT", onSigint);
+  for (let z = minzoom; z <= maxzoom && !shuttingDown; z++) {
+    const xMin = lngToTileX(west, z);
+    const xMax = lngToTileX(east, z);
+    const yMin = latToTileY(north, z);
+    const yMax = latToTileY(south, z);
+    const colHeight = yMax - yMin + 1;
 
-  const gen = enumerateTiles(config);
+    for (let x = xMin; x <= xMax && !shuttingDown; x++) {
 
-  await runWithConcurrency(gen, CONCURRENCY, async ({ z, x, y }) => {
-    if (shuttingDown) return;
+      // 已完成的列批次直接跳过
+      if (db.isBatchDone(z, x)) {
+        stats.skip     += colHeight;
+        stats.processed += colHeight;
+        printProgress();
+        continue;
+      }
 
-    const destPath = path.join(outDir, String(z), String(x), `${y}.pbf`);
+      await runWithConcurrency(yRange(yMin, yMax), CONCURRENCY, async (y) => {
+        if (shuttingDown) return;
 
-    // 断点续传：非空文件直接跳过
-    try {
-      const st = fs.statSync(destPath);
-      if (st.size > 0) {
-        stats.skip++;
+        // Phase 1 重试后仍失败的，本次跳过
+        if (stillErrorSet.has(`${z}:${x}:${y}`)) {
+          stats.error++;
+          stats.processed++;
+          printProgress();
+          return;
+        }
+
+        const destPath = path.join(outDir, String(z), String(x), `${y}.pbf`);
+
+        // 文件已存在（非空）跳过
+        try {
+          if (fs.statSync(destPath).size > 0) {
+            stats.skip++;
+            stats.processed++;
+            printProgress();
+            return;
+          }
+        } catch (_) {}
+
+        const url = tileUrlTemplate.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+        try {
+          const result = await downloadTile(url, destPath, RETRY_LIMIT);
+          result.status === "ok" ? stats.ok++ : stats.skip++;
+        } catch (_) {
+          stats.error++;
+          db.addError(z, x, y);
+        }
         stats.processed++;
         printProgress();
-        return;
+      }, () => shuttingDown);
+
+      // 未中断时标记整列完成
+      if (!shuttingDown) {
+        db.markBatchDone(z, x);
       }
-    } catch (_) { /* 文件不存在，继续下载 */ }
-
-    const url = tileUrlTemplate
-      .replace("{z}", z)
-      .replace("{x}", x)
-      .replace("{y}", y);
-
-    try {
-      const result = await downloadTile(url, destPath, RETRY_LIMIT);
-      result.status === "ok" ? stats.ok++ : stats.skip++;
-    } catch (e) {
-      stats.error++;
     }
-    stats.processed++;
-    printProgress();
-  });
+  }
 
-  process.off("SIGINT", onSigint);
   printProgress(true);
-  console.log(); // 换行
+  console.log();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(
-    `   ✓ 完成: 有效瓦片 ${fmtNum(stats.ok)}，` +
-    `跳过(含续传) ${fmtNum(stats.skip)}，` +
-    `错误 ${stats.error}，耗时 ${elapsed}s`
+    `   ✓ 完成: 有效瓦片 ${fmtNum(stats.ok + retryOk)}，` +
+    `跳过(含续传/空) ${fmtNum(stats.skip + retrySkip)}，` +
+    `错误 ${stats.error + retryFail}，耗时 ${elapsed}s`
   );
 
   if (shuttingDown) {
     console.log("   ⚠ 已中断，下次运行将从断点继续");
   }
 
-  return stats;
+  db.close();
+
+  return {
+    ok:    stats.ok    + retryOk,
+    skip:  stats.skip  + retrySkip,
+    error: stats.error + retryFail,
+  };
 }
 
 // -------- 主入口 --------
 
 async function main() {
   const filterPrefixes = process.argv.slice(2);
-
   const configs = loadConfigs(filterPrefixes.length > 0 ? filterPrefixes : null);
 
   if (configs.length === 0) {
@@ -314,6 +391,7 @@ async function main() {
   console.log("======================================");
   console.log(`数据集数量: ${configs.length}`);
   console.log(`输出根目录: ${OUTPUT_DIR}`);
+  console.log(`进度DB目录: ${DB_DIR}`);
   console.log(`并发数:     ${CONCURRENCY}`);
   console.log(`zoom 上限:  ${MAX_ZOOM_CAP}`);
   console.log();
@@ -326,20 +404,12 @@ async function main() {
   });
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.mkdirSync(DB_DIR, { recursive: true });
 
   const summary = {};
-  let sigintCount = 0;
-
-  process.on("SIGINT", () => {
-    sigintCount++;
-    if (sigintCount >= 2) {
-      console.log("\n强制退出");
-      process.exit(1);
-    }
-    console.log("\n收到 Ctrl+C，当前数据集完成后停止（再按一次强制退出）");
-  });
 
   for (const config of configs) {
+    if (shuttingDown) break;
     summary[config.uid] = await downloadDataset(config);
   }
 
@@ -351,7 +421,7 @@ async function main() {
       `  ${uid.substring(0, 8)}  ${cfg ? cfg.name : ""}` +
       `  下载:${fmtNum(s.ok)} 跳过:${fmtNum(s.skip)} 错误:${s.error}`
     );
-    totalOk += s.ok;
+    totalOk   += s.ok;
     totalSkip += s.skip;
     totalError += s.error;
   }
